@@ -173,7 +173,7 @@
             so.addChild("讀取文件並顯示資訊", 4, true);
             so.addChild("生成模型", 2, true);
             so.addChild("閥值控制", 2, true);
-            so.addChild("文件下載", 1, false);
+            so.addChild("文件下載", 1, true);
             so.addChild("材質更換", 1, false);
 
             //產生自評表，參數如下所示
@@ -208,7 +208,7 @@
         import * as THREE from "./threejs/build/three.module.js";
 
         import { threejsViewer } from './jsm/threejsViewer.js'
-        import { PLYExporter } from "./threejs/examples/jsm/exporters/PLYExporter.js";
+        import { STLExporter } from "./threejs/examples/jsm/exporters/STLExporter.js";
         import { MarchingCubes } from "./threejs/examples/jsm/objects/MarchingCubes.js";
 
         const fileRegex = /(\w+)_(\d+)_(\d+)_(\d+)_(\w+)\.(\w+)/;
@@ -261,7 +261,17 @@
 
             // 模型資料下載
             elements[1].addEventListener('click', (evt) => {
+                if (volume){
+                    const exporter = new STLExporter();
+                    const mesh = new THREE.Mesh(volume.geometry, materials[materialIdx]);
+                    const data = exporter.parse(mesh, {binary: true});
+                    let blob = new Blob([data], {type: 'application/octet-stream'});
 
+                    var download = document.createElement('a');
+                    download.href = URL.createObjectURL(blob);
+                    download.setAttribute('download', 'model.stl');
+                    download.click();
+                }
             })
 
             // 閥值設定
@@ -357,8 +367,7 @@
                 this._wireframeFlag = flag;
                 
                 if (flag){
-                    var geometry = this.mesh.generateBufferGeometry();
-                    var geo = new THREE.EdgesGeometry(geometry);
+                    var geo = new THREE.EdgesGeometry(this.geometry);
                     var mat = new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2});
                     var wireframe = new THREE.LineSegments(geo, mat);
                     this._wireframeObj = wireframe;
@@ -372,6 +381,14 @@
                 if (this._wireframeFlag){
                     this.renderWireframe(this._wireframeScene, this._wireframeFlag)
                 }
+            }
+
+            get geometry(){
+                var geometry;
+                if (this.mesh)
+                    geometry = this.mesh.generateBufferGeometry();
+                
+                return geometry;
             }
 
             get max(){
