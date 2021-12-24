@@ -172,7 +172,7 @@
             //addChild 要比 renderModal 先呼叫
             so.addChild("讀取文件並顯示資訊", 4, true);
             so.addChild("生成模型", 2, true);
-            so.addChild("閥值控制", 2, false);
+            so.addChild("閥值控制", 2, true);
             so.addChild("文件下載", 1, false);
             so.addChild("材質更換", 1, false);
 
@@ -215,9 +215,13 @@
 
         let modelView = new threejsViewer(document.body)// webgl畫布
 
-        let volume
+        let volume,
+            materials = [],
+            materialIdx = 0;
 
         function init() {
+            materials.push(new THREE.MeshPhongMaterial());
+            materials.push(new THREE.MeshNormalMaterial());
 
             // 收合按鈕:點擊事件設置
             let closeBtn = document.getElementById('closeBtn')
@@ -242,9 +246,16 @@
 
             // RAW文件讀取
             elements[0].addEventListener('change', (evt) => {
+                if (volume)
+                    volume.remove(modelView.scene);
+
                 var file = evt.target.files[0];
                 volume = RawLoader.validate(file, (volume) => {
-                    volume.renderMaterial(modelView.scene, new THREE.MeshNormalMaterial());
+                    updateIsoGUI(80);
+
+                    volume.generateModel(materials[materialIdx], () => {
+                        volume.renderMaterial(modelView.scene);
+                    });
                 });
             })
 
@@ -255,7 +266,9 @@
 
             // 閥值設定
             elements[2].addEventListener('click', (evt) => {
-
+                var value = parseInt(evt.currentTarget.value);
+                updateIsoGUI(value);
+                volume.isolation = value;
             })
 
             // 紋理設置
@@ -270,6 +283,20 @@
             })
         }
 
+        function updateIsoGUI(current){
+            if (volume){
+                var min = 0;
+                var max = volume.max;
+
+                var inputDom = document.getElementsByName('settingForm')[2];
+                var bannerDom = inputDom.parentNode.children[0];
+                inputDom.setAttribute('min', min);
+                inputDom.setAttribute('max', max);
+                inputDom.value = current;
+                bannerDom.innerHTML = `閥值:${current}/${max}`;
+            }
+        }
+
         window.onload = init
 
         class RawLoader{
@@ -278,6 +305,7 @@
 
                 var scope = this;
                 var reader = new FileReader();
+
                 reader.onload = function() {
                     var arrayBuffer = this.result;
                     var data = new cfg.type(arrayBuffer);
@@ -287,38 +315,37 @@
                     scope.yLength = cfg.y;
                     scope.zLength = cfg.z;
 
-                    var material = new THREE.MeshNormalMaterial();
-                    var maxRes = Math.max(cfg.x, cfg.y, cfg.z);
-                    var marchingCubes = new MarchingCubes(maxRes, material);
-                    for (var x=0; x<cfg.x; x++){
-                        for (var y=0; y<cfg.y; y++){
-                            for (var z=0; z<cfg.z; z++){
-                                var idx = ((z * cfg.y) + y) * cfg.x + x;
-                                marchingCubes.setCell(x, y, z, scope.data[idx]);
-                            }
-                        }
-                    }
-                    scope.geometry = marchingCubes.generateBufferGeometry();
-
                     callback(scope);
                 }
                 reader.readAsArrayBuffer(file);
             }
 
-            renderMaterial(scene, material){
+            generateModel(material, callback=()=>{}){
+                var scope = this;
+                
+                var maxRes = Math.max(scope.cfg.x, scope.cfg.y, scope.cfg.z);
+                var marchingCubes = new MarchingCubes(maxRes, material);
+                for (var x=0; x<scope.cfg.x; x++){
+                    for (var y=0; y<scope.cfg.y; y++){
+                        for (var z=0; z<scope.cfg.z; z++){
+                            var idx = ((z * scope.cfg.y) + y) * scope.cfg.x + x;
+                            marchingCubes.setCell(x, y, z, scope.data[idx]);
+                        }
+                    }
+                }
+                this.mesh = marchingCubes;
+
+                callback(scope);
+            }
+
+            renderMaterial(scene){
                 if (this._materialMesh)
                     scene.remove(this._materialMesh);
+                this._materialScene = scene;
                 
-                var mesh = new THREE.Mesh(this.geometry, material);
+                var mesh = this.mesh;
                 this._materialMesh = mesh;
-
-                const box = new THREE.Box3();
-                mesh.geometry.computeBoundingBox();
-                box.copy( mesh.geometry.boundingBox ).applyMatrix4( mesh.matrixWorld );
-                mesh.position.y = mesh.position.y - box.min.y;
-                this.position = mesh.position;
-
-                scene.add(mesh);
+                scene.add(this._materialMesh);
             }
 
             renderWireframe(scene, flag=true){
@@ -326,16 +353,43 @@
                     scene.remove(this._wireframeObj);
                     this._wireframeObj = null;
                 }
+                this._wireframeScene = scene;
+                this._wireframeFlag = flag;
                 
                 if (flag){
-                    var geo = new THREE.EdgesGeometry(this.geometry);
+                    var geometry = this.mesh.generateBufferGeometry();
+                    var geo = new THREE.EdgesGeometry(geometry);
                     var mat = new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2});
                     var wireframe = new THREE.LineSegments(geo, mat);
-                    wireframe.position.copy(this.position);
                     this._wireframeObj = wireframe;
 
-                    scene.add(wireframe);
+                    scene.add(this._wireframeObj);
                 }
+            }
+
+            set isolation(value){
+                this.mesh.isolation = value;
+                if (this._wireframeFlag){
+                    this.renderWireframe(this._wireframeScene, this._wireframeFlag)
+                }
+            }
+
+            get max(){
+                var value = 0;
+                switch(this.cfg.bit){
+                    case 'uint8':
+                        value = 255;
+                        break;
+                    case 'uint16':
+                        value = 65535;
+                        break;
+                }
+                return value;
+            }
+
+            remove(scene){
+                scene.remove(this._materialMesh);
+                scene.remove(this._wireframeObj);
             }
 
             static validate(file, callback=()=>{}){
