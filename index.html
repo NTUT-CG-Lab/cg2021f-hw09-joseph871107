@@ -159,7 +159,7 @@
     <script src="js/scoreoutputer.min.js"></script>
     <script>
         // 建構子 ScoreOutputer 接受一個字串，該字串為 csv 的檔案名稱
-        var so = new ScoreOutputer("109114514");
+        var so = new ScoreOutputer("110598005");
         so.installCSS(function () {
             // 安裝 bootstrap 的 css，如果在 html 上方引用 bootstrap 5.1.1 的話就不用使用 installCSS ，注意一定要 bootstrap css 5.1.1 版
             // installCSS 接收一個 callback 當作參數，作為成功安裝 bootstrap css 的回呼函式
@@ -171,7 +171,7 @@
             //有幾個項目就呼叫幾個 addChild
             //addChild 要比 renderModal 先呼叫
             so.addChild("讀取文件並顯示資訊", 4, true);
-            so.addChild("生成模型", 2, true);
+            so.addChild("生成模型", 2, false);
             so.addChild("閥值控制", 2, false);
             so.addChild("文件下載", 1, false);
             so.addChild("材質更換", 1, false);
@@ -209,7 +209,7 @@
         import { threejsViewer } from './jsm/threejsViewer.js'
         import { PLYExporter } from "./threejs/examples/jsm/exporters/PLYExporter.js";
 
-        const fileRegex = /(\w+)_(\d+)x(\d+)x(\d+)_(\w+)\.*/;
+        const fileRegex = /(\w+)_(\d+)_(\d+)_(\d+)_(\w+)\.(\w+)/;
 
         let modelView = new threejsViewer(document.body)// webgl畫布
 
@@ -238,7 +238,10 @@
 
             // RAW文件讀取
             elements[0].addEventListener('change', (evt) => {
-
+                var file = evt.target.files[0];
+                var model = RawLoader.validate(file, (model) => {
+                    ;
+                });
             })
 
             // 模型資料下載
@@ -263,6 +266,51 @@
         }
 
         window.onload = init
+
+        class RawLoader{
+            constructor(file, cfg, callback=()=>{}){
+                alert(JSON.stringify(cfg))
+
+                var scope = this;
+                var reader = new FileReader();
+                reader.onload = function() {
+                    var arrayBuffer = this.result;
+                    var data = new cfg.type(arrayBuffer);
+                    console.log(data, cfg);
+                    scope.data = data;
+                    scope.cfg = cfg;
+                    callback(scope);
+                }
+                reader.readAsArrayBuffer(file);
+            }
+
+            static validate(file, callback=()=>{}){
+                var typeTable = {
+                    'int8': Int8Array,
+                    'uint8': Uint8Array,
+                    'uint8C': Uint8ClampedArray,
+                    'int16': Int16Array,
+                    'uint16': Uint16Array,
+                    'int32': Int32Array,
+                    'uint32': Uint32Array,
+                    'bigint64': BigInt64Array,
+                    'biguint64': BigUint64Array,
+                    'float32': Float32Array,
+                    'float64': Float64Array,
+                };
+
+                var regResult = file.name.match(fileRegex);
+                if (regResult.length == 7 && regResult[6] == 'raw' && regResult[5].toLowerCase() in typeTable){
+                    return new RawLoader(file, {
+                        'x': regResult[2],
+                        'y': regResult[3],
+                        'z': regResult[4],
+                        'bit': regResult[5],
+                        'type': typeTable[regResult[5].toLowerCase()],
+                    }, callback);
+                }
+            }
+        }
     </script>
 
 </body>
