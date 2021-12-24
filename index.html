@@ -139,8 +139,6 @@
             <div class="labelLayout">
                 <label>Texture:</label>
                 <select class="labelInput" name="settingForm">
-                    <option value=0 selected>option 1</option>
-                    <option value=1>option 2</option>
                 </select>
             </div>
 
@@ -220,8 +218,20 @@
             materialIdx = 0;
 
         function init() {
-            materials.push(new THREE.MeshPhongMaterial());
-            materials.push(new THREE.MeshNormalMaterial());
+            var addMaterial = (mat, name) => {
+                var select = document.getElementsByName('settingForm')[3];
+
+                var opt = document.createElement('option');
+                opt.value = materials.length;
+                opt.innerHTML = name;
+                select.appendChild(opt);
+
+                materials.push(mat);
+            }
+            addMaterial(new THREE.MeshPhongMaterial(), 'MeshPhongMaterial');
+            addMaterial(new THREE.MeshNormalMaterial(), 'MeshNormalMaterial');
+            addMaterial(new THREE.MeshToonMaterial(), 'MeshToonMaterial');
+            addMaterial(new THREE.MeshLambertMaterial({color: 0x049ef4}), 'MeshLambertMaterial');
 
             // 收合按鈕:點擊事件設置
             let closeBtn = document.getElementById('closeBtn')
