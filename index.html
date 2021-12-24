@@ -171,7 +171,7 @@
             //有幾個項目就呼叫幾個 addChild
             //addChild 要比 renderModal 先呼叫
             so.addChild("讀取文件並顯示資訊", 4, true);
-            so.addChild("生成模型", 2, false);
+            so.addChild("生成模型", 2, true);
             so.addChild("閥值控制", 2, false);
             so.addChild("文件下載", 1, false);
             so.addChild("材質更換", 1, false);
@@ -205,13 +205,17 @@
         });
     </script>
     <script type="module">
+        import * as THREE from "./threejs/build/three.module.js";
 
         import { threejsViewer } from './jsm/threejsViewer.js'
         import { PLYExporter } from "./threejs/examples/jsm/exporters/PLYExporter.js";
+        import { MarchingCubes } from "./threejs/examples/jsm/objects/MarchingCubes.js";
 
         const fileRegex = /(\w+)_(\d+)_(\d+)_(\d+)_(\w+)\.(\w+)/;
 
         let modelView = new threejsViewer(document.body)// webgl畫布
+
+        let volume
 
         function init() {
 
@@ -239,8 +243,8 @@
             // RAW文件讀取
             elements[0].addEventListener('change', (evt) => {
                 var file = evt.target.files[0];
-                var model = RawLoader.validate(file, (model) => {
-                    ;
+                volume = RawLoader.validate(file, (volume) => {
+                    volume.renderMaterial(modelView.scene, new THREE.MeshNormalMaterial());
                 });
             })
 
@@ -261,7 +265,8 @@
 
             // 模型網格顯示
             elements[4].addEventListener('change', (evt) => {
-
+                if (volume)
+                    volume.renderWireframe(modelView.scene, evt.currentTarget.checked);
             })
         }
 
@@ -276,12 +281,61 @@
                 reader.onload = function() {
                     var arrayBuffer = this.result;
                     var data = new cfg.type(arrayBuffer);
-                    console.log(data, cfg);
                     scope.data = data;
                     scope.cfg = cfg;
+                    scope.xLength = cfg.x;
+                    scope.yLength = cfg.y;
+                    scope.zLength = cfg.z;
+
+                    var material = new THREE.MeshNormalMaterial();
+                    var maxRes = Math.max(cfg.x, cfg.y, cfg.z);
+                    var marchingCubes = new MarchingCubes(maxRes, material);
+                    for (var x=0; x<cfg.x; x++){
+                        for (var y=0; y<cfg.y; y++){
+                            for (var z=0; z<cfg.z; z++){
+                                var idx = ((z * cfg.y) + y) * cfg.x + x;
+                                marchingCubes.setCell(x, y, z, scope.data[idx]);
+                            }
+                        }
+                    }
+                    scope.geometry = marchingCubes.generateBufferGeometry();
+
                     callback(scope);
                 }
                 reader.readAsArrayBuffer(file);
+            }
+
+            renderMaterial(scene, material){
+                if (this._materialMesh)
+                    scene.remove(this._materialMesh);
+                
+                var mesh = new THREE.Mesh(this.geometry, material);
+                this._materialMesh = mesh;
+
+                const box = new THREE.Box3();
+                mesh.geometry.computeBoundingBox();
+                box.copy( mesh.geometry.boundingBox ).applyMatrix4( mesh.matrixWorld );
+                mesh.position.y = mesh.position.y - box.min.y;
+                this.position = mesh.position;
+
+                scene.add(mesh);
+            }
+
+            renderWireframe(scene, flag=true){
+                if (this._wireframeObj){
+                    scene.remove(this._wireframeObj);
+                    this._wireframeObj = null;
+                }
+                
+                if (flag){
+                    var geo = new THREE.EdgesGeometry(this.geometry);
+                    var mat = new THREE.LineBasicMaterial({color: 0xffffff, linewidth: 2});
+                    var wireframe = new THREE.LineSegments(geo, mat);
+                    wireframe.position.copy(this.position);
+                    this._wireframeObj = wireframe;
+
+                    scene.add(wireframe);
+                }
             }
 
             static validate(file, callback=()=>{}){
@@ -302,9 +356,9 @@
                 var regResult = file.name.match(fileRegex);
                 if (regResult.length == 7 && regResult[6] == 'raw' && regResult[5].toLowerCase() in typeTable){
                     return new RawLoader(file, {
-                        'x': regResult[2],
-                        'y': regResult[3],
-                        'z': regResult[4],
+                        'x': parseInt(regResult[2]),
+                        'y': parseInt(regResult[3]),
+                        'z': parseInt(regResult[4]),
                         'bit': regResult[5],
                         'type': typeTable[regResult[5].toLowerCase()],
                     }, callback);
