@@ -174,7 +174,7 @@
             so.addChild("生成模型", 2, true);
             so.addChild("閥值控制", 2, true);
             so.addChild("文件下載", 1, true);
-            so.addChild("材質更換", 1, false);
+            so.addChild("材質更換", 1, true);
 
             //產生自評表，參數如下所示
             so.renderModal(
@@ -283,7 +283,9 @@
 
             // 紋理設置
             elements[3].addEventListener('change', (evt) => {
-
+                materialIdx = evt.currentTarget.value;
+                if (volume)
+                    volume.material = materials[materialIdx];
             })
 
             // 模型網格顯示
@@ -381,6 +383,11 @@
                 if (this._wireframeFlag){
                     this.renderWireframe(this._wireframeScene, this._wireframeFlag)
                 }
+            }
+
+            set material(value){
+                if (this.mesh)
+                    this.mesh.material = value;
             }
 
             get geometry(){
